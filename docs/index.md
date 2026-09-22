@@ -1,173 +1,226 @@
----
-icon: lucide/rocket
----
+🛠️ Tutorial Passo a Passo: Configuração de Serviços no Debian 13 (Trixie)
 
-# Get started
+Este tutorial documenta todo o procedimento para preparar o ambiente da máquina virtual acra-gana, desde o acesso remoto via SSH, passando pelo servidor Web Apache2 até o acesso à interface gráfica via RDP.
 
-For full documentation visit [zensical.org](https://zensical.org/docs/).
+🧰 1. Especificações do Ambiente
 
-## Commands
+Host Físico: PC 19
 
-* [`zensical new`][new] - Create a new project
-* [`zensical serve`][serve] - Start local web server
-* [`zensical build`][build] - Build your site
+Máquina Virtual (VM): acra-gana
 
-  [new]: https://zensical.org/docs/usage/new/
-  [serve]: https://zensical.org/docs/usage/preview/
-  [build]: https://zensical.org/docs/usage/build/
+Endereço IP Local: 192.168.56.19
 
-## Examples
+Sistema Operacional: Debian Trixie (13)
 
-### Admonitions
+FQDN do Host: acra-gana.gana.lab
 
-> Go to [documentation](https://zensical.org/docs/authoring/admonitions/)
+Domínios Gerenciados: www.gana.lab e docs.gana.lab (Alias: docs.lab)
 
-!!! note
+🔑 ETAPA 1: Instalar e Configurar o SSH (Acesso Sem Senha)
 
-    This is a **note** admonition. Use it to provide helpful information.
+O SSH permite gerenciar a máquina virtual Debian remotamente a partir do terminal no Windows (Git Bash ou PowerShell).
 
-!!! warning
+1.1. Instalar e iniciar o serviço SSH no Debian
 
-    This is a **warning** admonition. Be careful!
+No terminal do Debian (como root ou com sudo):
 
-### Details
+# Atualizar a lista de pacotes
+sudo apt update
 
-> Go to [documentation](https://zensical.org/docs/authoring/admonitions/#collapsible-blocks)
+# Instalar o servidor SSH
+sudo apt install openssh-server -y
 
-??? info "Click to expand for more info"
+# Ativar e iniciar o serviço
+sudo systemctl enable ssh
+sudo systemctl start ssh
 
-    This content is hidden until you click to expand it.
-    Great for FAQs or long explanations.
 
-## Code Blocks
+1.2. Gerar o Par de Chaves no Cliente (Windows)
 
-> Go to [documentation](https://zensical.org/docs/authoring/code-blocks/)
+No terminal da sua máquina local (Git Bash ou PowerShell):
 
-``` python hl_lines="2" title="Code blocks"
-def greet(name):
-    print(f"Hello, {name}!") # (1)!
+ssh-keygen -t ed25519 -C "admin@acra-gana"
 
-greet("Python")
+
+(Pressione Enter em todas as confirmações para aceitar os locais padrão sem senha adicional).
+
+1.3. Enviar a Chave Pública para o Debian
+
+Envie a chave pública para que o Debian reconheça seu computador:
+
+ssh-copy-id root@192.168.56.19
+
+
+1.4. Testar o Acesso Direto sem Senha
+
+ssh root@192.168.56.19
+
+
+🌐 ETAPA 2: Instalar o Apache2 e Configurar os Serviços HTTP
+
+Com o acesso SSH estabelecido, instalamos o servidor web Apache2 para hospedar os sites locais.
+
+2.1. Instalar o Apache2 no Debian
+
+sudo apt update
+sudo apt install apache2 -y
+
+# Ativar e iniciar o serviço
+sudo systemctl enable apache2
+sudo systemctl start apache2
+
+
+2.2. Criar a Estrutura de Diretórios dos Portais Web
+
+Crie as pastas que armazenarão os arquivos dos dois domínios:
+
+sudo mkdir -p /srv/http/www.gana.lab
+sudo mkdir -p /srv/http/docs.gana.lab
+
+
+2.3. Criar os Arquivos Web (index.html)
+
+1. Site Principal (/srv/http/www.gana.lab/index.html):
+
+sudo nano /srv/http/www.gana.lab/index.html
+
+
+(Cole o código HTML do portal principal contendo o botão redirecionando para http://docs.gana.lab).
+
+2. Site de Documentação (/srv/http/docs.gana.lab/index.html):
+
+sudo nano /srv/http/docs.gana.lab/index.html
+
+
+(Cole o código HTML contendo os dados do servidor e status do sistema).
+
+2.4. Permissões de Leitura do Apache
+
+Ajuste as permissões do diretório para o usuário do Apache (www-data):
+
+sudo chown -R www-data:www-data /srv/http/
+sudo chmod -R 755 /srv/http/
+
+
+2.5. Configurar os VirtualHosts do Apache
+
+1. VirtualHost www.gana.lab:
+
+sudo nano /etc/apache2/sites-available/www.gana.lab.conf
+
+
+Conteúdo do arquivo:
+
+<VirtualHost *:80>
+    ServerName www.gana.lab
+    DocumentRoot /srv/http/www.gana.lab
+
+    <Directory /srv/http/www.gana.lab>
+        AllowOverride All
+        Require all granted
+    </Directory>
+</VirtualHost>
+
+
+2. VirtualHost docs.gana.lab:
+
+sudo nano /etc/apache2/sites-available/docs.gana.lab.conf
+
+
+Conteúdo do arquivo:
+
+<VirtualHost *:80>
+    ServerName docs.gana.lab
+    ServerAlias docs.lab
+    DocumentRoot /srv/http/docs.gana.lab
+
+    <Directory /srv/http/docs.gana.lab>
+        AllowOverride All
+        Require all granted
+    </Directory>
+</VirtualHost>
+
+
+2.6. Ativar os VirtualHosts
+
+# Ativar as configurações criadas
+sudo a2ensite www.gana.lab.conf
+sudo a2ensite docs.gana.lab.conf
+
+# Validar se a sintaxe dos arquivos está correta
+sudo apache2ctl configtest
+
+# Recarregar as configurações no Apache
+sudo systemctl reload apache2
+
+
+2.7. Configuração de DNS no Cliente (Windows)
+
+Para abrir os domínios .lab no navegador do Windows:
+
+Abra o Bloco de Notas como Administrador.
+
+Abra o arquivo: C:\Windows\System32\drivers\etc\hosts.
+
+Adicione esta linha no final:
+
+192.168.56.19   www.gana.lab docs.gana.lab docs.lab
+
+
+Salve e limpe o cache DNS no Prompt de Comando (CMD):
+
+ipconfig /flushdns
+
+
+🖥️ ETAPA 3: Instalar e Configurar o Acesso Gráfico RDP (XRDP)
+
+Por fim, configuramos o servidor RDP para acessar a área de trabalho do Debian remotamente pelo Windows (mstsc).
+
+3.1. Instalar e Ativar o Serviço XRDP no Debian
+
+# Instalar o servidor de área de trabalho remota
+`sudo apt update`
+`sudo apt install xrdp -y`
+
+# Ativar no boot e iniciar o serviço
+`sudo systemctl enable xrdp`
+`sudo systemctl start xrdp`
+
+
+3.2. Conectar pelo Windows
+
+Pressione Win + R, digite mstsc e pressione Enter.
+
+No campo Computador, informe o IP: 192.168.56.19.
+
+Clique em Conectar e entre com seu usuário e senha do Debian.
+
+🐙 ETAPA 4: Publicação da Documentação no GitHub (Codespaces)
+
+Com os serviços ativos e testados, suba o arquivo index.md para o seu repositório GitHub via terminal ou VS Code / Codespaces:
+
+# Verificar o estado do repositório
+`git status`
+
+# Adicionar a documentação
+`git add index.md`
+
+# Criar o commit com mensagem descritiva
+`git commit -m "docs: adiciona tutorial de instalacao ordenada (SSH, Apache2/HTTP, RDP)"`
+
+# Enviar para a branch principal no GitHub
+`git push origin main`
+
+
+🔍 Comandos de Validação e Diagnóstico
+
+# Verificar status de todos os serviços principais
+```
+sudo systemctl status ssh
+sudo systemctl status apache2
+sudo systemctl status xrdp
 ```
 
-1.  > Go to [documentation](https://zensical.org/docs/authoring/code-blocks/#code-annotations)
-
-    Code annotations allow to attach notes to lines of code.
-
-Code can also be highlighted inline: `#!python print("Hello, Python!")`.
-
-## Content tabs
-
-> Go to [documentation](https://zensical.org/docs/authoring/content-tabs/)
-
-=== "Python"
-
-    ``` python
-    print("Hello from Python!")
-    ```
-
-=== "Rust"
-
-    ``` rs
-    println!("Hello from Rust!");
-    ```
-
-## Diagrams
-
-> Go to [documentation](https://zensical.org/docs/authoring/diagrams/)
-
-``` mermaid
-graph LR
-  A[Start] --> B{Error?};
-  B -->|Yes| C[Hmm...];
-  C --> D[Debug];
-  D --> B;
-  B ---->|No| E[Yay!];
-```
-
-## Footnotes
-
-> Go to [documentation](https://zensical.org/docs/authoring/footnotes/)
-
-Here's a sentence with a footnote.[^1]
-
-Hover it, to see a tooltip.
-
-[^1]: This is the footnote.
-
-
-## Formatting
-
-> Go to [documentation](https://zensical.org/docs/authoring/formatting/)
-
-- ==This was marked (highlight)==
-- ^^This was inserted (underline)^^
-- ~~This was deleted (strikethrough)~~
-- H~2~O
-- A^T^A
-- ++ctrl+alt+del++
-
-## Icons, Emojis
-
-> Go to [documentation](https://zensical.org/docs/authoring/icons-emojis/)
-
-* :sparkles: `:sparkles:`
-* :rocket: `:rocket:`
-* :tada: `:tada:`
-* :memo: `:memo:`
-* :eyes: `:eyes:`
-
-## Maths
-
-> Go to [documentation](https://zensical.org/docs/authoring/math/)
-
-$$
-\cos x=\sum_{k=0}^{\infty}\frac{(-1)^k}{(2k)!}x^{2k}
-$$
-
-!!! warning "Needs configuration"
-    Note that MathJax is included via a `script` tag on this page and is not
-    configured in the generated default configuration to avoid including it
-    in a pages that do not need it. See the documentation for details on how
-    to configure it on all your pages if they are more Maths-heavy than these
-    simple starter pages.
-
-<script id="MathJax-script" src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
-<script>
-  window.MathJax = {
-    tex: {
-      inlineMath: [["\\(", "\\)"]],
-      displayMath: [["\\[", "\\]"]],
-      processEscapes: true,
-      processEnvironments: true
-    },
-    options: {
-      ignoreHtmlClass: ".*|",
-      processHtmlClass: "arithmatex"
-    }
-  };
-
-  document$.subscribe(() => {
-    MathJax.startup.output.clearCache()
-    MathJax.typesetClear()
-    MathJax.texReset()
-    MathJax.typesetPromise()
-  })
-</script>
-
-## Task Lists
-
-> Go to [documentation](https://zensical.org/docs/authoring/lists/#using-task-lists)
-
-* [x] Install Zensical
-* [x] Configure `zensical.toml`
-* [x] Write amazing documentation
-* [ ] Deploy anywhere
-
-## Tooltips
-
-> Go to [documentation](https://zensical.org/docs/authoring/tooltips/)
-
-[Hover me][example]
-
-  [example]: https://example.com "I'm a tooltip!"
+# Testar resposta local das páginas HTTP
+`curl -I http://www.gana.lab`
+`curl -I http://docs.gana.lab`
